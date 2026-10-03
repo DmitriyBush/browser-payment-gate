@@ -1,0 +1,156 @@
+{
+  "_about": "Default lists of browser-payment-gate. Copy this file, edit it, and pass its path to load_lists(); see docs/LISTS.md. Labels are matched as whole words, case-insensitive.",
+  "paid_action_labels": [
+    "subscribe",
+    "upgrade",
+    "buy",
+    "pay",
+    "checkout",
+    "continue to payment",
+    "proceed to payment",
+    "place order",
+    "оплатить",
+    "подписаться",
+    "купить",
+    "перейти к оплате",
+    "оформить заказ"
+  ],
+  "rail_labels": [
+    "pay by invoice",
+    "direct debit",
+    "sepa",
+    "ideal",
+    "klarna",
+    "pay later",
+    "pay in 3",
+    "pay in 4",
+    "afterpay",
+    "оплата по счету",
+    "прямой дебет",
+    "купить в рассрочку"
+  ],
+  "trial_cta_labels": [
+    "start free trial",
+    "start trial",
+    "try free",
+    "begin trial",
+    "начать пробный период",
+    "попробовать бесплатно"
+  ],
+  "pledge_labels": [
+    "donate",
+    "pledge",
+    "become a member",
+    "set up monthly",
+    "пожертвовать",
+    "стать патроном"
+  ],
+  "pledge_weak_labels": [
+    "support",
+    "поддержать"
+  ],
+  "stored_pay_labels": [
+    "buy now",
+    "1-click",
+    "buy with 1-click",
+    "place order",
+    "pay now",
+    "order now",
+    "complete purchase",
+    "pay with saved card",
+    "redeem balance",
+    "use store credit",
+    "use balance",
+    "оплатить сохраненной картой",
+    "купить в 1 клик",
+    "купить сейчас",
+    "оформить заказ",
+    "использовать баланс"
+  ],
+  "express_pay_labels": [
+    "apple pay",
+    "google pay",
+    "g pay",
+    "buy with apple pay",
+    "buy with google pay"
+  ],
+  "deposit_labels": [
+    "add funds",
+    "top up",
+    "top-up",
+    "add balance",
+    "deposit",
+    "buy credit",
+    "buy gift card",
+    "пополнить",
+    "внести депозит",
+    "пополнить баланс",
+    "купить подарочную карту"
+  ],
+  "carrier_billing_labels": [
+    "subscribe to continue",
+    "get access",
+    "get instant access",
+    "подключить",
+    "получить доступ",
+    "подписаться"
+  ],
+  "attach_labels": [
+    "add payment method",
+    "add card",
+    "add a card",
+    "connect paypal",
+    "connect wallet",
+    "connect a wallet",
+    "metamask",
+    "link card",
+    "привязать карту",
+    "добавить карту",
+    "привязать счет"
+  ],
+  "weak_commit_labels": [
+    "continue",
+    "next",
+    "продолжить",
+    "далее",
+    "start",
+    "начать"
+  ],
+  "processor_domains": [
+    "js.stripe.com",
+    "checkout.stripe.com",
+    "pay.stripe.com",
+    "braintreegateway.com",
+    "paypal.com",
+    "checkout.paypal.com",
+    "pay.google.com",
+    "payments.google.com",
+    "adyen.com",
+    "checkout.com"
+  ],
+  "payment_iframe_domains": [
+    "js.stripe.com",
+    "checkout.stripe.com",
+    "braintreegateway.com",
+    "paypal.com",
+    "pay.google.com",
+    "adyen.com",
+    "checkout.com"
+  ],
+  "blocked_url_patterns": [
+    "/checkout",
+    "/payment",
+    "/billing",
+    "/pay/",
+    "/purchase",
+    "/upgrade",
+    "/subscribe",
+    "/pricing/buy",
+    "checkout.stripe.com",
+    "pay.google.com",
+    "paypal.com/checkoutnow",
+    "secure.bankofamerica",
+    "online.citibank",
+    "chase.com/pay"
+  ]
+}
