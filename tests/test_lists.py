@@ -102,3 +102,15 @@ def test_label_with_regex_characters_is_literal(tmp_path):
     assert ls.ok
     s = scan(signals={'priceShown': True}, target={'text': 'Get the c++ plan'})
     assert evaluate(s, 'click', D, False, ls).code == 'B_PAID'
+
+
+def test_command_line(tmp_path, capsys):
+    from browser_payment_gate.__main__ import main
+    assert main(['lists']) == 0
+    assert main(['lists', str(tmp_path / 'nope.json')]) == 1
+    assert 'NOT USABLE' in capsys.readouterr().out
+    assert main(['label', 'Buy now']) == 0
+    out = capsys.readouterr().out
+    assert 'stored_pay_labels' in out and 'paid_action_labels' in out
+    main(['label', 'Payments history'])
+    assert 'matches no label list' in capsys.readouterr().out

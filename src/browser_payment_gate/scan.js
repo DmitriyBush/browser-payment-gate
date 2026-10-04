@@ -3,8 +3,7 @@
 (function(){
   function txt(el){ try { return (el.textContent||'').slice(0,2000); } catch(e){ return ''; } }
   var out = {url: location.href, domain: location.hostname,
-             title: (document.title||'').slice(0,200), heading:'',
-             ownArtifact: false};
+             title: (document.title||'').slice(0,200), heading:''};
   var h = document.querySelector('h1,h2,[role=heading]');
   out.heading = h ? (h.innerText||'').slice(0,200) : '';
   function collect(root, fields, iframes){
@@ -38,9 +37,7 @@
     iframeSrcs: srcs,
     blockedUrl: false,
     expressPay: /\b(apple ?pay|google ?pay|g ?pay)\b/i.test(bodyText),
-    savedCardSelector: /\b(card )?ending in\b\s*\d|(\*{2,}|\u2022{2,})\s?\d{4}\b/i.test(bodyText),
-    closedShadowOnPage: false,
-    unresolvableControls: false
+    savedCardSelector: /\b(card )?ending in\b\s*\d|(\*{2,}|\u2022{2,})\s?\d{4}\b/i.test(bodyText)
   };
   out.signals = sig;
   var sel = {SELECTOR};
@@ -63,6 +60,5 @@
       inClosedShadow:false
     };
   }
-  out.domHash = String((out.title+out.fields.length+srcs.length+(out.target.text||'')).length);
   return JSON.stringify(out);
 })()

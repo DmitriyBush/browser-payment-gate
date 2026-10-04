@@ -130,3 +130,43 @@ def test_paid_label_next_to_sub_dollar_price(label, lists):
              target={'text': label, 'ancestorText': 'Pro $0.99 / month ' + label,
                      'adjacentPrice': '$0.99'})
     assert evaluate(s, 'click', D, False, lists).block is True
+
+
+# --- payment addresses: a path part, not any substring ----------------------------------
+
+@pytest.mark.parametrize('url,block', [
+    ('https://shop.example/checkout', True),
+    ('https://shop.example/checkout?step=2', True),
+    ('https://shop.example/checkout/', True),
+    ('https://shop.example/checkout-session/1', True),   # a hyphen continues the word
+    ('https://shop.example/en/checkout', True),
+    ('https://example.com/pay/x', True),
+    ('https://example.com/billing-faq', True),            # declared: stricter side
+    ('https://docs.example.com/payments/quickstart', False),
+    ('https://example.com/blog/upgrades-in-python-3', False),
+    ('https://example.com/subscribers/list', False),
+    ('https://checkout.stripe.com/c/pay/x', True),        # host part: anywhere
+])
+def test_payment_address_is_a_path_part(url, block, lists):
+    host = url.split('/')[2]
+    s = scan(url=url, domain=host, target={'text': 'Next page'})
+    assert evaluate(s, 'click', {host}, False, lists).block is block
+
+
+# --- a link into a checkout is refused even with no money around it ---------------------
+
+@pytest.mark.parametrize('href,block,code', [
+    ('https://shop.example/checkout?key=addon&code=PROMO', True, 'E_NAV'),
+    ('https://pay.stripe.com/c/pay/cs_live_x', True, 'E_NAV'),
+    ('https://shop.example/confirm?order_id=7', True, 'E_NAV'),
+    ('https://shop.example/blog/how-we-price', False, 'FREE'),
+])
+def test_link_address_judged_without_money_around(href, block, code, lists):
+    s = scan(target={'tag': 'A', 'text': 'Learn more', 'href': href, 'ancestorText': 'Learn more'})
+    d = evaluate(s, 'click', D, False, lists)
+    assert (d.block, d.code) == (block, code)
+
+
+def test_add_to_plan_on_a_page_that_sells(lists):
+    s = scan(signals={'priceShown': True}, target={'text': 'Add to plan', 'ancestorText': 'Add to plan Learn more'})
+    assert evaluate(s, 'click', D, False, lists).code == 'B_PAID'

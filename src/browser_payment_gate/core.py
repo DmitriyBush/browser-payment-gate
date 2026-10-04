@@ -203,9 +203,20 @@ def host_matches(domain, domain_list):
     return any(h == d.lower() or h.endswith('.' + d.lower()) for d in domain_list)
 
 
+def _url_pattern_rx(p):
+    """A pattern starting with '/' is a path part and must not run on into a longer word:
+    '/payment' matches '/payment', '/payment/', '/payment?x', '/payment-step', but not
+    '/payments' (a docs section) -- a hyphen continues the match, a letter or digit does
+    not. Other patterns (host parts such as 'checkout.stripe.com') match anywhere."""
+    p = str(p).lower()
+    if p.startswith('/') and not p.endswith('/'):
+        return re.compile(re.escape(p) + r'(?![a-z0-9])')
+    return re.compile(re.escape(p))
+
+
 def blocked_url(url, lists):
     u = (url or '').lower()
-    return any(p.lower() in u for p in lists.get('blocked_url_patterns'))
+    return any(_url_pattern_rx(p).search(u) for p in lists.get('blocked_url_patterns') if str(p).strip())
 
 
 def _local_money(t):
@@ -426,18 +437,23 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
     if action == 'goto' and nav_as_commit(scan, lists):
         return Decision(True, 'E_NAV', 'navigation commits an order or lands on a payment processor')
 
-    # A plain link is navigation: judge its address, not the money text around it (a
-    # footnote next to a GDP figure is not a purchase). Every label rule above has
-    # already run, so "Buy now" / "Subscribe" links never reach this point.
+    # A plain link is navigation: judge its address. A link INTO a checkout or a payment
+    # processor is refused whatever stands around it (an "Add to plan" link to
+    # /checkout?key=... has no price in its block). A link elsewhere is not refused for
+    # the money text around it (a footnote next to a GDP figure is not a purchase).
+    # Every label rule above has already run, so "Buy now" / "Subscribe" links never
+    # reach this point.
     href = (t.get('href') or '').strip()
-    if (suspect and action == 'click' and (t.get('tag') or '').upper() == 'A'
-            and href.lower().startswith(('http://', 'https://')) and not sdet['s2']):
+    is_link = (action == 'click' and (t.get('tag') or '').upper() == 'A'
+               and href.lower().startswith(('http://', 'https://')))
+    if is_link:
         if blocked_url(href, lists):
             return Decision(True, 'E_NAV', 'the link leads to a payment / checkout address')
         nav = nav_precheck(href, lists)
         if nav.block:
             return nav
-        return Decision(False, 'LINK', 'plain link: navigation to %s, judged by its address' % href[:80])
+        if suspect and not sdet['s2']:
+            return Decision(False, 'LINK', 'plain link: navigation to %s, judged by its address' % href[:80])
 
     if suspect:
         return Decision(True, 'FLOOR',
