@@ -81,8 +81,8 @@ def page(browser):
         url = route.request.url
         body = PAGES.get(url)
         if body is None:
-            return route.fulfill(status=200, body='', content_type='text/html')
-        return route.fulfill(status=200, body=body, content_type='text/html')
+            return route.fulfill(status=200, body='', content_type='text/html; charset=utf-8')
+        return route.fulfill(status=200, body=body, content_type='text/html; charset=utf-8')
 
     ctx.route('**/*', serve)
     pg = ctx.new_page()
@@ -180,3 +180,79 @@ def test_guarded_click_passes_ordinary_click(page):
     _watch_clicks(page, '#faq')
     guarded_click(page, '#faq', expected_domains={'shop.test'})
     assert page.evaluate('window.__clicked === true') is True
+
+
+TRICKY = """<html><head><title>Cart</title></head><body>
+<h1>Cart</h1>
+<div><span>$19.99/month</span><div role="button" id="divbtn">Continue</div></div>
+<form><p>Order total $49.00</p><div class="actions"><button id="confirm" type="submit">Go</button></div></form>
+<div><p>Order total $49.00</p><a id="hash" href="#">Proceed</a></div>
+<div><p>GDP $993 billion</p><a id="note" href="#cite-12">[12]</a><a id="self" href="/cart">Proceed</a></div>
+<div><p>Итого 1 990 \u20bd</p><button id="rub">Продолжить</button></div>
+<form><input id="cardf" autocomplete="cc-number"><button id="send" type="submit">Send</button></form>
+<button id="faq2">Read FAQ</button>
+<div id="host"></div>
+<script>
+  const root = document.getElementById('host').attachShadow({mode: 'open'});
+  root.innerHTML = '<div><span>$9.99</span><button class="act">Buy now</button></div>';
+  window.__shadowClicked = false;
+  root.querySelector('.act').addEventListener('click', () => { window.__shadowClicked = true; });
+</script>
+</body></html>"""
+PAGES['https://shop.test/cart'] = TRICKY
+
+
+@pytest.mark.parametrize('selector,block', [
+    ('#divbtn', True),    # the price next to a div-button counts (block = parent, not itself)
+    ('#confirm', True),   # the enclosing form wins over the nearest wrapper div
+    ('#hash', True),      # href="#" is not navigation
+    ('#note', False),     # an in-page anchor is navigation: a footnote next to money
+    ('#self', True),      # a link to the current page itself is a script button
+    ('#rub', True),       # "1 990 \u20bd" is a price
+    ('#send', True),      # submit of a form that holds a card field
+    ('#faq2', False),
+])
+def test_tricky_cart(page, selector, block):
+    open_(page, 'https://shop.test/cart')
+    d = check(page, selector, 'click', expected_domains={'shop.test'})
+    assert d.block is block, d
+
+
+def test_scan_js_price_matches_python_price(page):
+    open_(page, 'https://shop.test/cart')
+    assert scan_page(page, '#rub')['target']['adjacentPrice'] == '1 990 \u20bd'
+    assert scan_page(page, '#hash')['target']['href'] == ''
+
+
+def test_shadow_dom_button_is_judged_and_not_clicked(page):
+    open_(page, 'https://shop.test/cart')
+    # Playwright's engine enters the open shadow root; the scan must see THAT element
+    s = scan_page(page, '#host .act')
+    assert s['target']['found'] is True and s['target']['text'] == 'Buy now'
+    with pytest.raises(PaymentBlocked):
+        guarded_click(page, '#host .act', expected_domains={'shop.test'})
+    assert page.evaluate('window.__shadowClicked') is False
+
+
+def test_generic_expression_path(page):
+    from browser_payment_gate import scan_expression, parse_scan, evaluate
+    open_(page, 'https://shop.test/plans')
+    s = parse_scan(page.evaluate(scan_expression('#pro')))
+    assert s['target']['text'] == 'Subscribe'
+    assert evaluate(s, 'click', {'shop.test'}).block is True
+    s2 = parse_scan(page.evaluate(scan_expression('#nope')))
+    assert evaluate(s2, 'click', {'shop.test'}).code == 'TARGET_NOT_FOUND'
+
+
+def test_async_page_in_sync_call_says_why():
+    class FakeLoc:
+        first = None
+        def count(self):
+            async def c():
+                return 1
+            return c()
+    class FakePage:
+        def locator(self, sel):
+            l = FakeLoc(); l.first = l; return l
+    d = check(FakePage(), '#x')
+    assert d.code == 'UNRESOLVED' and 'async' in d.reason

@@ -6,19 +6,11 @@ cannot be read, the action is refused and handed to the human.
 
 The core is pure: it takes the page scan produced by scan.js (see scanner.py) and the
 action, and returns a Decision. It does not drive a browser and does not import one.
+It never raises on its input: a scan it cannot read is refused as UNRESOLVED.
 
 Ancestry: this is the decision layer of the payment gate that has guarded the Serpentis
-research system's own browser since June 2026 (Serpentis "kalpa_payment_gate"). Changes
-against that gate, measured before release (docs/CALIBRATION.md):
-  1. Labels and page phrases are matched as WHOLE WORDS ("making payments" is not
-     "G Pay", "extending into" is not "card ending in").
-  2. Price/total TEXT counts against an action only NEAR its target (the target's form
-     or block). Anywhere on the page it only marks the page as commerce for the
-     label rules -- a "Buy now" button on a page with prices is still refused.
-     Structural signals (payment iframe, checkout URL, checkout layout) stay page-wide.
-  3. A target that is not found is reported as TARGET_NOT_FOUND, not as a payment page.
-  4. "support" / "поддержать" alone is not a pledge: it needs money or recurring terms
-     next to it (a help-centre "Support" link is not a donation).
+research system's own browser since June 2026, recalibrated before release -- what was
+changed and how it was measured: docs/CALIBRATION.md.
 
 Threat model: GOOD-FAITH guard. It keeps a well-meaning agent from paying by accident;
 it does not stop a hostile page that disguises its controls, nor an agent that wants to
@@ -35,6 +27,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LISTS_PATH = os.path.join(_HERE, 'lists.json')
 LISTS_ENV = 'BROWSER_PAYMENT_GATE_LISTS'
 
+ACTIONS = ('click', 'type', 'goto', 'os-input')
+
 REQUIRED_LISTS = (
     'paid_action_labels', 'rail_labels', 'trial_cta_labels', 'pledge_labels',
     'pledge_weak_labels', 'stored_pay_labels', 'express_pay_labels', 'deposit_labels',
@@ -44,31 +38,41 @@ REQUIRED_LISTS = (
 
 
 class Lists(object):
-    """The editable part of the gate. ok is False when the file could not be read or a
-    required list is missing/empty -- the gate then runs FLOOR-ONLY (stricter), never
-    open."""
+    """The editable part of the gate. ok is False when the file could not be read, a
+    required list is missing or empty, or holds an entry that is not a non-blank string
+    -- the gate then runs on its built-in minimum and refuses on any money signal; it
+    never opens."""
 
     def __init__(self, data, source, error=''):
-        self.data = data or {}
+        self.data = data if isinstance(data, dict) else {}
         self.source = source
         self.error = error
-        missing = [n for n in REQUIRED_LISTS
-                   if not (isinstance(self.data.get(n), list) and self.data.get(n))]
-        self.ok = not error and not missing
-        if missing and not error:
-            self.error = 'missing or empty lists: %s' % ', '.join(missing)
+        missing, bad = [], []
+        for n in REQUIRED_LISTS:
+            v = self.data.get(n)
+            if not (isinstance(v, list) and v):
+                missing.append(n)
+            elif not all(isinstance(x, str) and x.strip() for x in v):
+                bad.append(n)
+        self.ok = not error and not missing and not bad
+        if not error and (missing or bad):
+            parts = []
+            if missing:
+                parts.append('missing or empty lists: %s' % ', '.join(missing))
+            if bad:
+                parts.append('entries that are not non-blank strings in: %s' % ', '.join(bad))
+            self.error = '; '.join(parts)
         self._rx = {}
 
     def get(self, name):
         v = self.data.get(name)
-        return v if isinstance(v, list) else []
+        return [x for x in v if isinstance(x, str) and x.strip()] if isinstance(v, list) else []
 
     def label_rx(self, name):
         """One compiled whole-word pattern per list (cached)."""
         rx = self._rx.get(name)
         if rx is None:
-            labels = sorted((str(x).lower() for x in self.get(name) if str(x).strip()),
-                            key=len, reverse=True)
+            labels = sorted((x.lower() for x in self.get(name)), key=len, reverse=True)
             if labels:
                 rx = re.compile(r'(?<!\w)(' + '|'.join(re.escape(l) for l in labels) + r')(?!\w)', re.I)
             else:
@@ -79,7 +83,7 @@ class Lists(object):
 
 def load_lists(path=None):
     """Load lists from path, else from $BROWSER_PAYMENT_GATE_LISTS, else the defaults.
-    Never raises: a broken file gives Lists(ok=False), and the gate goes floor-only."""
+    Never raises: a broken file gives Lists(ok=False)."""
     src = path or os.environ.get(LISTS_ENV) or DEFAULT_LISTS_PATH
     try:
         with open(src, 'r', encoding='utf-8') as f:
@@ -99,6 +103,32 @@ def default_lists():
     if _DEFAULT is None:
         _DEFAULT = load_lists()
     return _DEFAULT
+
+
+# Used when the lists are unusable: a small built-in minimum, so that a broken file
+# can never make the gate blind to the most common payment controls and providers.
+FLOOR_LISTS = Lists({
+    'paid_action_labels': ['subscribe', 'upgrade', 'buy', 'pay', 'checkout', 'place order',
+                           'submit payment', 'make a payment', 'confirm payment',
+                           'confirm order', 'complete order',
+                           'оплатить', 'подписаться', 'купить', 'подтвердить заказ'],
+    'rail_labels': ['pay later', 'direct debit', 'pay by invoice'],
+    'trial_cta_labels': ['start free trial', 'start trial', 'free trial', 'try free'],
+    'pledge_labels': ['donate', 'pledge', 'become a member', 'пожертвовать'],
+    'pledge_weak_labels': ['support', 'поддержать'],
+    'stored_pay_labels': ['buy now', '1-click', 'pay now', 'order now', 'complete purchase'],
+    'express_pay_labels': ['apple pay', 'google pay', 'g pay'],
+    'deposit_labels': ['add funds', 'top up', 'deposit', 'пополнить'],
+    'carrier_billing_labels': ['subscribe to continue', 'get access', 'подписаться'],
+    'attach_labels': ['add card', 'add payment method', 'connect wallet', 'добавить карту'],
+    'weak_commit_labels': ['continue', 'next', 'продолжить', 'далее'],
+    'processor_domains': ['stripe.com', 'paypal.com', 'braintreegateway.com', 'adyen.com',
+                          'checkout.com', 'pay.google.com', 'payments.google.com'],
+    'payment_iframe_domains': ['stripe.com', 'paypal.com', 'braintreegateway.com',
+                               'adyen.com', 'checkout.com', 'pay.google.com'],
+    'blocked_url_patterns': ['/checkout', '/payment', '/billing', '/pay/', '/purchase',
+                             '/subscribe', 'checkout.stripe.com', 'pay.google.com'],
+}, '<built-in minimum>')
 
 
 # ---------------------------------------------------------------------------
@@ -125,12 +155,77 @@ COMMIT_SIGNATURE_RE = re.compile(
     r'/(confirm|activate|subscribe|order|place-?order|checkout|pay|purchase)\b', re.I)
 TOKEN_PARAM_RE = re.compile(r'[?&](token|order|order_id|oid|id|cs|session_id|sessionid|sid)=', re.I)
 VERIFY_PATH_RE = re.compile(r'verify|activate-?account|verify-?email|confirm-?email', re.I)
-FREE_INDICATOR_RE = re.compile(r'\bfree\b|бесплатн', re.I)
-FREE_PRICE_RE = re.compile(r'^\s*(free|\$?0([.,]0{1,2})?|0\s*(usd|eur|руб))\s*$', re.I)
-# Price and total near the target (same shapes the scanner uses page-wide).
-# The WHOLE amount is captured: "$0.99" must not be read as "$0" (free).
-PRICE_RE = re.compile(r'(\$|EUR|GBP|RUB|€|£|₽)\s?\d+(?:[.,]\d+)*|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|€|£|₽)', re.I)
+# "free" as its own word -- not the tail of "ad-free" / "risk-free".
+FREE_INDICATOR_RE = re.compile(r'(?<![\w-])free\b|бесплатн', re.I)
+
+# Prices. The WHOLE amount is captured ("$0.99" is not "$0"); thousands may be grouped by
+# spaces ("1 990 ₽"); the currency may stand before or after the number.
+_AMOUNT = r'\d+(?:[   ]\d{3})*(?:[.,]\d+)*'
+_CUR_BEFORE = r'(?:\$|€|£|₽|₸|\b(?:USD|EUR|GBP|RUB|KZT|UAH|CHF)\b)'
+_CUR_AFTER = r'(?:\$|€|£|₽|₸|(?:USD|EUR|GBP|RUB|KZT|UAH|CHF|руб|тг)(?![a-zа-яё]))'
+PRICE_RE = re.compile(_CUR_BEFORE + r'\s?' + _AMOUNT + '|' + _AMOUNT + r'\s?' + _CUR_AFTER, re.I)
+_ZERO = r'0+(?:[.,]0+)?'
+FREE_PRICE_RE = re.compile(
+    r'^\s*(?:free|бесплатно|' + _CUR_BEFORE + r'?\s?' + _ZERO + r'\s?(?:' + _CUR_AFTER + r'|руб\.)?)\s*$', re.I)
 TOTAL_RE = re.compile(r'\b(total|order summary|amount due|subtotal)\b|итого|к оплате', re.I)
+
+
+# ---------------------------------------------------------------------------
+# Reading the scan
+# ---------------------------------------------------------------------------
+
+_TARGET_STR = ('tag', 'type', 'text', 'aria', 'autocomplete', 'name', 'id', 'href',
+               'ancestorText', 'adjacentPrice')
+_TARGET_BOOL = ('isFormSubmit', 'inClosedShadow')
+_SCAN_STR = ('url', 'domain', 'title', 'heading')
+
+
+def _malformed(scan, action):
+    """Why this scan cannot be judged, or '' if it can. Any shape the gate does not
+    expect is refused, never coerced into 'no signal'."""
+    if not isinstance(scan, dict):
+        return 'scan is not an object'
+    for k in _SCAN_STR:
+        if scan.get(k) is not None and not isinstance(scan.get(k), str):
+            return '%s is not text' % k
+    sig = scan.get('signals', {})
+    if not isinstance(sig, dict):
+        return 'signals is not an object'
+    for k, v in sig.items():
+        if k == 'iframeSrcs':
+            if not (isinstance(v, list) and all(isinstance(x, str) for x in v)):
+                return 'signals.iframeSrcs is not a list of text'
+        elif v is not None and not isinstance(v, bool):
+            return 'signals.%s is not true/false' % k
+    if sig.get('scanError'):
+        return 'the page scan reported an error'
+    fields = scan.get('fields', [])
+    if not (isinstance(fields, list) and all(isinstance(f, dict) for f in fields)):
+        return 'fields is not a list of objects'
+    for f in fields:
+        if any(v is not None and not isinstance(v, str) for v in f.values()):
+            return 'a field has a value that is not text'
+    if action == 'goto':
+        return ''
+    t = scan.get('target')
+    if not isinstance(t, dict):
+        return 'target is missing or not an object'
+    if t.get('found') is False:
+        return ''
+    if t.get('found') is not True:
+        return 'target.found is not true/false'
+    for k in _TARGET_STR:
+        if t.get(k) is not None and not isinstance(t.get(k), str):
+            return 'target.%s is not text' % k
+    for k in _TARGET_BOOL:
+        if t.get(k) is not None and not isinstance(t.get(k), bool):
+            return 'target.%s is not true/false' % k
+    ff = t.get('formFields', [])
+    if not (isinstance(ff, list) and all(isinstance(f, dict) for f in ff)):
+        return 'target.formFields is not a list of objects'
+    if any(v is not None and not isinstance(v, str) for f in ff for v in f.values()):
+        return 'a form field has a value that is not text'
+    return ''
 
 
 def _target_text(t):
@@ -177,11 +272,30 @@ def _is_instrument_field(scan, t, lists):
     return _is_card_field(t) or _is_bank_field(t) or _is_carrier_field(scan, t, lists)
 
 
+def _block_prices(t):
+    """Every price in the target's block: the scanner's adjacentPrice plus every price
+    in the block text."""
+    out = [m.group(0) for m in PRICE_RE.finditer(t.get('ancestorText') or '')]
+    adj = (t.get('adjacentPrice') or '').strip()
+    if adj:
+        out.append(adj)
+    return out
+
+
 def _adjacent_is_free(t):
-    price = (t.get('adjacentPrice') or '').strip()
-    if price and FREE_PRICE_RE.match(price):
-        return True
+    """Free only if every price in the block is free; with no price at all, a 'free'
+    word on the control itself. One real price anywhere in the block wins."""
+    prices = _block_prices(t)
+    if prices:
+        return all(FREE_PRICE_RE.match(p) for p in prices)
     return bool(FREE_INDICATOR_RE.search(t.get('text') or ''))
+
+
+def _local_money(t):
+    """A non-free price, or total text, in the target's own block (form/section/div)."""
+    if any(not FREE_PRICE_RE.match(p) for p in _block_prices(t)):
+        return True
+    return bool(TOTAL_RE.search(t.get('ancestorText') or ''))
 
 
 def _domain_in(values, domain_list):
@@ -208,7 +322,7 @@ def _url_pattern_rx(p):
     '/payment' matches '/payment', '/payment/', '/payment?x', '/payment-step', but not
     '/payments' (a docs section) -- a hyphen continues the match, a letter or digit does
     not. Other patterns (host parts such as 'checkout.stripe.com') match anywhere."""
-    p = str(p).lower()
+    p = p.lower()
     if p.startswith('/') and not p.endswith('/'):
         return re.compile(re.escape(p) + r'(?![a-z0-9])')
     return re.compile(re.escape(p))
@@ -216,32 +330,25 @@ def _url_pattern_rx(p):
 
 def blocked_url(url, lists):
     u = (url or '').lower()
-    return any(_url_pattern_rx(p).search(u) for p in lists.get('blocked_url_patterns') if str(p).strip())
+    return any(_url_pattern_rx(p).search(u) for p in lists.get('blocked_url_patterns'))
 
 
-def _local_money(t):
-    """Price or total text in the target's own block (form/section/div)."""
-    anc = t.get('ancestorText') or ''
-    price = (t.get('adjacentPrice') or '').strip()
-    if not price:
-        # scan.js fills adjacentPrice itself; a scanner that does not still gets judged
-        # on the block text, the same way.
-        m = PRICE_RE.search(anc)
-        price = m.group(0) if m else ''
-    return bool((price and not FREE_PRICE_RE.match(price)) or TOTAL_RE.search(anc))
+def _payment_frame(scan, lists):
+    sig = scan.get('signals') or {}
+    return bool(sig.get('paymentIframe') or sig.get('iframesTruncated')
+                or _domain_in(sig.get('iframeSrcs') or [], lists.get('payment_iframe_domains')))
 
 
 def surface_signals(scan, lists):
     """Floor signals. Returns (suspect, detail).
-    s1 money text NEAR the target; s2 payment iframe on the page; s3 checkout URL;
-    s4 checkout layout / express or saved-card text near the target; s5 target inside a
-    closed shadow root (unreadable)."""
+    s1 money text NEAR the target; s2 payment iframe on the page (or iframes the scan
+    could not list in full); s3 checkout URL; s4 checkout layout / express or saved-card
+    text near the target; s5 target inside a closed shadow root (unreadable)."""
     sig = scan.get('signals') or {}
     t = scan.get('target') or {}
     anc = t.get('ancestorText') or ''
     s1 = _local_money(t)
-    s2 = bool(sig.get('paymentIframe')
-              or _domain_in(sig.get('iframeSrcs') or [], lists.get('payment_iframe_domains')))
+    s2 = _payment_frame(scan, lists)
     s3 = bool(sig.get('blockedUrl') or blocked_url(scan.get('url'), lists))
     s4 = bool(sig.get('checkoutSummaryLayout')
               or _label_in({'text': anc}, lists, 'express_pay_labels')
@@ -256,8 +363,7 @@ def commerce_page(scan, lists):
     that itself reads as pay/buy/subscribe), never to refuse an arbitrary click."""
     sig = scan.get('signals') or {}
     return bool(sig.get('orderTotal') or sig.get('priceShown') or sig.get('priceAsImage')
-                or sig.get('checkoutSummaryLayout') or sig.get('paymentIframe')
-                or _domain_in(sig.get('iframeSrcs') or [], lists.get('payment_iframe_domains'))
+                or sig.get('checkoutSummaryLayout') or _payment_frame(scan, lists)
                 or sig.get('blockedUrl') or blocked_url(scan.get('url'), lists))
 
 
@@ -266,8 +372,7 @@ def _is_free_select(scan, t, lists):
         return False
     if _is_card_field(t) or _is_bank_field(t):
         return False
-    sig = scan.get('signals') or {}
-    if sig.get('paymentIframe') or _domain_in(sig.get('iframeSrcs') or [], lists.get('payment_iframe_domains')):
+    if _payment_frame(scan, lists):
         return False
     if not _adjacent_is_free(t):
         return False
@@ -300,6 +405,18 @@ def nav_as_commit(scan, lists):
     return False
 
 
+def _page_has_instrument_field(scan):
+    """A card or bank field anywhere on the page (or fields the scan could not list in
+    full). Does NOT refuse an unrelated click by itself; it makes a FORM SUBMIT count as
+    committing."""
+    if (scan.get('signals') or {}).get('fieldsTruncated'):
+        return True
+    for f in scan.get('fields') or []:
+        if _is_card_field(f) or _is_bank_field(f):
+            return True
+    return False
+
+
 def is_committing(scan, action, lists):
     """Does this action create a billing/instrument obligation?"""
     t = scan.get('target') or {}
@@ -322,19 +439,9 @@ def is_committing(scan, action, lists):
     return False
 
 
-def sig_page(scan):
-    return scan.get('signals') or {}
-
-
-def _page_has_instrument_field(scan):
-    """A card or bank field anywhere on the page. Does NOT refuse an unrelated click by
-    itself (a billing widget in a dashboard corner is allowed); it makes a FORM SUBMIT
-    count as committing."""
-    for f in scan.get('fields') or []:
-        if _is_card_field(f) or _is_bank_field(f):
-            return True
-    return False
-
+# ---------------------------------------------------------------------------
+# The decision
+# ---------------------------------------------------------------------------
 
 def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None):
     """The gate decision for ONE mutating action.
@@ -345,32 +452,58 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
         empty means nowhere.
     prior_mutation: an action already changed this tab (relevant for os-input).
     lists: Lists from load_lists(); default lists when None.
-    Returns Decision(block, code, reason). Reading a page never needs this call."""
-    lists = lists or default_lists()
-    expected = set(expected_domains or ())
-
+    Returns Decision(block, code, reason). Never raises. Reading a page never needs this."""
+    if action not in ACTIONS:
+        return Decision(True, 'UNRESOLVED', 'unknown action %r -- expected one of %s'
+                        % (action, ', '.join(ACTIONS)))
     if scan is None:
         return Decision(True, 'UNRESOLVED',
                         'the page could not be scanned -- refused until a human looks')
+    why = _malformed(scan, action)
+    if why:
+        return Decision(True, 'UNRESOLVED', 'the page scan cannot be judged (%s) -- refused' % why)
+    if not isinstance(lists, Lists):
+        lists = default_lists()
+    try:
+        expected = set(d for d in (expected_domains or ()) if isinstance(d, str))
+        if not lists.ok:
+            return _evaluate_floor_only(scan, action, expected, prior_mutation, lists)
+        return _evaluate(scan, action, expected, prior_mutation, lists)
+    except Exception as e:  # noqa: BLE001 -- the gate never opens on its own failure
+        return Decision(True, 'UNRESOLVED', 'the gate failed on this scan (%s: %s) -- refused'
+                        % (type(e).__name__, e))
+
+
+def _evaluate_floor_only(scan, action, expected, prior_mutation, lists):
+    """Lists unusable: every rule fixed in code still runs, on the built-in minimum
+    lists; anything with a money signal is refused; only a page with no money signal at
+    all lets an action through, and the reason says so."""
+    note = 'payment lists unavailable (%s); built-in minimum used' % lists.error
+    d = _evaluate(scan, action, expected, prior_mutation, FLOOR_LISTS)
+    if d.block:
+        return Decision(True, d.code, '%s; %s' % (d.reason, note))
+    suspect, _ = surface_signals(scan, FLOOR_LISTS)
+    if suspect or commerce_page(scan, FLOOR_LISTS):
+        return Decision(True, 'LISTS_UNAVAILABLE', '%s -- refused on a page with money signals' % note)
+    if action == 'os-input':
+        return Decision(True, 'OS_INPUT', '%s -- os-input refused' % note)
+    return Decision(False, 'LISTS_UNAVAILABLE_CLEAN',
+                    '%s -- allowed only because the page shows no money signal' % note)
+
+
+def _evaluate(scan, action, expected, prior_mutation, lists):
+    if action == 'goto':
+        # A navigation is judged by the address first, then by the landing scan.
+        nav = nav_precheck(scan.get('url') or '', lists)
+        if nav.block and not host_matches(scan.get('domain'), expected):
+            return nav
     t = scan.get('target') or {}
-    if action != 'goto' and not t.get('found', True):
+    if action != 'goto' and t.get('found') is False:
         return Decision(True, 'TARGET_NOT_FOUND',
                         'the element to act on was not found on the page -- nothing to judge; '
                         'check the selector (this is not a payment finding)')
 
     suspect, sdet = surface_signals(scan, lists)
-
-    # Lists unreadable -> floor-only: stricter, never open.
-    if not lists.ok:
-        if suspect or commerce_page(scan, lists):
-            return Decision(True, 'LISTS_UNAVAILABLE',
-                            'payment lists unavailable (%s) -- refused on a page with money '
-                            'signals' % lists.error)
-        if action == 'os-input':
-            return Decision(True, 'OS_INPUT', 'lists unavailable -- os-input refused')
-        return Decision(False, 'LISTS_UNAVAILABLE_CLEAN',
-                        'payment lists unavailable (%s) -- allowed only because the page '
-                        'shows no money signal' % lists.error)
 
     if action == 'os-input' and (suspect or commerce_page(scan, lists) or prior_mutation):
         return Decision(True, 'OS_INPUT',
@@ -382,8 +515,18 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
         return Decision(True, 'DOMAIN_FLOOR',
                         'committing action on a domain the human did not allow for this task')
 
+    commerce = commerce_page(scan, lists)
+    sig = scan.get('signals') or {}
+    # Page-wide on purpose (kept from the original gate): where a page sells AND offers
+    # express pay or a saved card, no click there is "unrelated" -- one button can carry
+    # two effects; not even a "free" one. What made this rule over-block before was
+    # phrases found inside other words; the scanner now matches whole words.
+    if commerce and (sig.get('expressPay') or sig.get('savedCardSelector')):
+        return Decision(True, 'G_STORED', 'page sells and offers express pay / a saved card -- '
+                        'no action on it is treated as unrelated')
+
     if _is_free_select(scan, t, lists):
-        return Decision(False, 'B_FREE', 'explicit free-plan selection (free price/label, no instrument)')
+        return Decision(False, 'B_FREE', 'explicit free-plan selection (every price next to it is free, no instrument)')
 
     if _is_card_field(t):
         return Decision(True, 'A_CARD', 'target is a card number / CVV / expiry field')
@@ -393,11 +536,13 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
         return Decision(True, 'A_CARRIER', 'phone field next to a carrier-billing commitment')
     if _label_in(t, lists, 'attach_labels'):
         return Decision(True, 'A_ATTACH', 'target attaches a payment method or wallet')
+    if t.get('isFormSubmit') and any(_is_card_field(f) or _is_bank_field(f)
+                                     for f in t.get('formFields') or []):
+        return Decision(True, 'A_FORM', 'submits a form that holds a card or bank-account field')
     heading = (scan.get('heading') or '') + ' ' + (scan.get('title') or '')
     if sdet['s3'] or re.search(r'checkout|billing|add card|add payment|payment method', heading, re.I):
         return Decision(True, 'A_SURFACE', 'action on a dedicated payment page')
 
-    commerce = commerce_page(scan, lists)
     anc = t.get('ancestorText') or ''
 
     if _label_in(t, lists, 'trial_cta_labels'):
@@ -420,13 +565,6 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
         return Decision(False, 'G_BALANCE', 'applying free credit to a $0 order with no instrument')
     if commerce and (_label_in(t, lists, 'stored_pay_labels') or _label_in(t, lists, 'express_pay_labels')):
         return Decision(True, 'G_STORED', 'one-click / express / saved-card purchase control')
-    # Page-wide on purpose (kept from the original gate, its finding F11): where a page
-    # sells AND offers express pay or a saved card, no click there is "unrelated" -- one
-    # button can carry two effects. What made this rule over-block before was phrases
-    # found inside other words; the scanner now matches whole words.
-    if commerce and (sig_page(scan).get('expressPay') or sig_page(scan).get('savedCardSelector')):
-        return Decision(True, 'G_STORED', 'page sells and offers express pay / a saved card -- '
-                        'no action on it is treated as unrelated')
 
     if commerce:
         if _label_in(t, lists, 'rail_labels'):
@@ -464,19 +602,27 @@ def evaluate(scan, action, expected_domains=(), prior_mutation=False, lists=None
 
 
 def nav_precheck(url, lists=None):
-    """URL-only check before navigating (the landing page is not visible yet)."""
-    lists = lists or default_lists()
+    """URL-only check before navigating (the landing page is not visible yet).
+    Never raises; with unusable lists the built-in minimum is used."""
+    if not isinstance(lists, Lists):
+        lists = default_lists()
+    if not lists.ok:
+        lists = FLOOR_LISTS
     if not url:
         return Decision(False, 'FREE', 'no url')
+    if not isinstance(url, str):
+        return Decision(True, 'UNRESOLVED', 'the address is not text -- refused')
     try:
         from urllib.parse import urlparse
-        host = urlparse(url.lower()).hostname or ''
+        parts = urlparse(url.lower())
+        host, path = parts.hostname or '', parts.path or ''
     except Exception:  # noqa: BLE001
-        host = ''
+        return Decision(True, 'E_NAV', 'the address cannot be parsed -- refused')
     if host_matches(host, lists.get('processor_domains')):
         return Decision(True, 'E_NAV', 'navigation to a payment-processor domain')
     if COMMIT_SIGNATURE_RE.search(url) and TOKEN_PARAM_RE.search(url):
-        if VERIFY_PATH_RE.search(url):
+        if VERIFY_PATH_RE.search(path) and not re.search(
+                r'/(checkout|pay|purchase|order|place-?order|subscribe)\b', path):
             return Decision(False, 'FREE', 'account verify / activate link')
         return Decision(True, 'E_NAV', 'navigation carries an order/confirm signature and a token')
     return Decision(False, 'FREE', 'plain navigation')

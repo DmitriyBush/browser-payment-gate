@@ -49,7 +49,10 @@ def test_empty_required_list_is_not_ok(tmp_path):
 def test_broken_lists_refuse_on_money_page(tmp_path):
     ls = load_lists(str(tmp_path / 'nope.json'))
     s = scan(signals={'priceShown': True}, target={'text': 'Buy'})
-    assert evaluate(s, 'click', D, False, ls).code == 'LISTS_UNAVAILABLE'
+    d = evaluate(s, 'click', D, False, ls)
+    assert d.block and 'lists unavailable' in d.reason
+    s2 = scan(signals={'priceShown': True}, target={'text': 'Star'})
+    assert evaluate(s2, 'click', D, False, ls).code == 'LISTS_UNAVAILABLE'
 
 
 def test_broken_lists_allow_clean_page_and_say_so(tmp_path):

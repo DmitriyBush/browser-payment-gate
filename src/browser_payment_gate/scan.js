@@ -1,35 +1,47 @@
-// Page scan of browser-payment-gate. Runs INSIDE the page; returns a JSON string.
-// The selector placeholder below is replaced by scanner.py with a JSON string literal. All label matching happens in Python.
-(function(){
-  function txt(el){ try { return (el.textContent||'').slice(0,2000); } catch(e){ return ''; } }
+// Page scan of browser-payment-gate. A function of the target element (or null when it
+// was not found); runs INSIDE the page and returns a JSON string. All label matching
+// happens in Python. Used two ways (scanner.py): a Playwright locator passes the element
+// it resolved, so the scan and the click are the same element; other drivers evaluate
+// scan_expression(selector), which looks the element up with document.querySelector.
+function (el) {
+  var FIELDS_MAX = 300, IFRAMES_MAX = 100;
+  function txt(node){ try { return (node.textContent||'').slice(0,2000); } catch(e){ return ''; } }
+  function fieldOf(e){
+    return {autocomplete:(e.getAttribute('autocomplete')||''), name:(e.getAttribute('name')||''),
+            id:(e.id||''), tag:e.tagName};
+  }
   var out = {url: location.href, domain: location.hostname,
              title: (document.title||'').slice(0,200), heading:''};
   var h = document.querySelector('h1,h2,[role=heading]');
   out.heading = h ? (h.innerText||'').slice(0,200) : '';
-  function collect(root, fields, iframes){
-    var els = root.querySelectorAll('input,select,iframe,[autocomplete]');
+  var fields = [], iframes = [], scanError = false;
+  function collect(root){
+    var els = root.querySelectorAll('input,select,textarea,iframe,[autocomplete]');
     for (var i=0;i<els.length;i++){
       var e = els[i];
       if (e.tagName === 'IFRAME'){ if (e.src) iframes.push(e.src); continue; }
-      fields.push({autocomplete:(e.getAttribute('autocomplete')||''),
-                   name:(e.getAttribute('name')||''), id:(e.id||''), tag:e.tagName});
+      fields.push(fieldOf(e));
     }
     var all = root.querySelectorAll('*');
     for (var j=0;j<all.length;j++){
-      var n = all[j];
-      if (n.shadowRoot){ collect(n.shadowRoot, fields, iframes); }
+      if (all[j].shadowRoot){ collect(all[j].shadowRoot); }
     }
   }
-  var fields = [], iframes = [];
-  try { collect(document, fields, iframes); } catch(e){}
-  out.fields = fields.slice(0,50);
+  try { collect(document); } catch(e){ scanError = true; }
+  out.fields = fields.slice(0, FIELDS_MAX);
   var srcs = [];
-  for (var k=0;k<iframes.length && k<20;k++){ try { srcs.push(new URL(iframes[k]).hostname); } catch(e){ srcs.push(iframes[k]); } }
+  for (var k=0;k<iframes.length && k<IFRAMES_MAX;k++){
+    try { srcs.push(new URL(iframes[k], location.href).hostname); } catch(e){ srcs.push(String(iframes[k])); }
+  }
   var bodyText = (document.body ? document.body.innerText : '') || '';
-  // the whole amount: "$0.99" must not be read as "$0" (free)
-  var priceRe = /(\$|EUR|GBP|RUB|\u20ac|\u00a3|\u20bd)\s?\d+(?:[.,]\d+)*|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|\u20ac|\u00a3|\u20bd)/i;
-  var sig = {
-    orderTotal: /\b(total|order summary|amount due|subtotal)\b|\u0438\u0442\u043e\u0433\u043e|\u043a \u043e\u043f\u043b\u0430\u0442\u0435/i.test(bodyText),
+  // The whole amount ("$0.99" is not "$0"); grouped thousands ("1 990 ₽"); currency
+  // before or after. Mirrors PRICE_RE in core.py.
+  var amount = '\\d+(?:[ \\u00a0\\u202f]\\d{3})*(?:[.,]\\d+)*';
+  var curBefore = '(?:\\$|\\u20ac|\\u00a3|\\u20bd|\\u20b8|\\b(?:USD|EUR|GBP|RUB|KZT|UAH|CHF)\\b)';
+  var curAfter = '(?:\\$|\\u20ac|\\u00a3|\\u20bd|\\u20b8|(?:USD|EUR|GBP|RUB|KZT|UAH|CHF|\\u0440\\u0443\\u0431|\\u0442\\u0433)(?![a-z\\u0430-\\u044f\\u0451]))';
+  var priceRe = new RegExp(curBefore + '\\s?' + amount + '|' + amount + '\\s?' + curAfter, 'i');
+  out.signals = {
+    orderTotal: /\b(total|order summary|amount due|subtotal)\b|итого|к оплате/i.test(bodyText),
     priceShown: priceRe.test(bodyText),
     priceAsImage: false,
     checkoutSummaryLayout: !!document.querySelector('[class*=checkout],[class*=order-summary],[id*=checkout],[class*=cart-summary]'),
@@ -37,28 +49,45 @@
     iframeSrcs: srcs,
     blockedUrl: false,
     expressPay: /\b(apple ?pay|google ?pay|g ?pay)\b/i.test(bodyText),
-    savedCardSelector: /\b(card )?ending in\b\s*\d|(\*{2,}|\u2022{2,})\s?\d{4}\b/i.test(bodyText)
+    savedCardSelector: /\b(card )?ending in\b\s*\d|(\*{2,}|•{2,})\s?\d{4}\b/i.test(bodyText),
+    fieldsTruncated: fields.length > FIELDS_MAX,
+    iframesTruncated: iframes.length > IFRAMES_MAX,
+    scanError: scanError
   };
-  out.signals = sig;
-  var sel = {SELECTOR};
-  var el = null;
-  try { el = document.querySelector(sel); } catch(e){ el = null; }
-  if (!el){
+  if (!el || el.nodeType !== 1){
     out.target = {found:false};
-  } else {
-    var anc = el.closest('form,section,[role=group],fieldset,div') || el.parentElement || el;
-    out.target = {
-      found:true, tag:el.tagName, type:(el.getAttribute('type')||''),
-      text:(el.innerText||el.value||'').slice(0,120),
-      aria:(el.getAttribute('aria-label')||''),
-      autocomplete:(el.getAttribute('autocomplete')||''),
-      name:(el.getAttribute('name')||''), id:(el.id||''),
-      href:(el.href||''),
-      isFormSubmit: (el.type === 'submit') || (el.form != null && (el.tagName==='BUTTON' || el.type==='submit')),
-      ancestorText: txt(anc),
-      adjacentPrice: (function(){ var m = txt(anc).match(priceRe); return m ? m[0] : ''; })(),
-      inClosedShadow:false
-    };
+    return JSON.stringify(out);
   }
+  // The control's block: the enclosing form if there is one, else the nearest wrapper
+  // ABOVE the element (closest() would otherwise return a div-button itself).
+  var up = el.parentElement || el;
+  var anc = el.closest('form') || up.closest('section,[role=group],fieldset,div,li,tr,td') || up;
+  // No wrapper below <body>: the whole page is not "next to" the control.
+  if (anc === document.body || anc === document.documentElement){ anc = el; }
+  var ancText = txt(anc);
+  var m = ancText.match(priceRe);
+  var formFields = [];
+  try {
+    if (el.form){ for (var f=0; f<el.form.elements.length && f<FIELDS_MAX; f++){ formFields.push(fieldOf(el.form.elements[f])); } }
+  } catch(e){ out.signals.scanError = true; }
+  var rawHref = el.getAttribute('href') || '';
+  function noFrag(u){ return String(u||'').split('#')[0]; }
+  // A script button dressed as a link is not navigation: href "#", "javascript:", or the
+  // current page itself with no anchor. An in-page anchor ("#cite-12") is navigation.
+  var scriptLink = !rawHref || rawHref === '#' || /^\s*javascript:/i.test(rawHref) ||
+      (!!el.href && String(el.href).indexOf('#') < 0 && noFrag(el.href) === noFrag(location.href));
+  out.target = {
+    found:true, tag:el.tagName, type:(el.getAttribute('type')||''),
+    text:(el.innerText||el.value||'').slice(0,120),
+    aria:(el.getAttribute('aria-label')||''),
+    autocomplete:(el.getAttribute('autocomplete')||''),
+    name:(el.getAttribute('name')||''), id:(el.id||''),
+    href:(!scriptLink && el.href) ? String(el.href) : '',
+    isFormSubmit: (el.type === 'submit') || (el.form != null && (el.tagName==='BUTTON' || el.type==='submit')),
+    formFields: formFields,
+    ancestorText: ancText,
+    adjacentPrice: m ? m[0] : '',
+    inClosedShadow:false
+  };
   return JSON.stringify(out);
-})()
+}

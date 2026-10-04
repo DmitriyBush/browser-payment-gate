@@ -3,7 +3,7 @@
 This library is cut from the payment guard of the Serpentis research system, which has
 guarded that system's own agent browser since June 2026. That guard was strict on purpose,
 and in daily use it refused ordinary clicks often enough to be a nuisance; in the
-measurement below it refused nearly one ordinary click in five. A guard like that gets
+measurement below it refused 15-18 % of ordinary clicks (one in six or seven). A guard like that gets
 switched off -- and then guards nothing. Before
 release we measured why it over-blocked, changed the rules, and measured again on two
 sets at once: ordinary pages (false refusals) and pages with real payment buttons
@@ -36,6 +36,26 @@ sets at once: ordinary pages (false refusals) and pages with real payment button
    documentation section) or `/upgrades-...` (a blog post). A hyphen still continues the
    word, so `/billing-faq` is still refused -- the strict side.
 
+Items 9-14 came from two independent code reviews before release and from the live
+measurement below; each one was an input the gate ALLOWED although it could spend money,
+and each is now a test.
+
+9. **Every price next to the control counts.** "Free" holds only if every price in the
+   block is free: "$0 setup, $29/month [Subscribe]", a table "Free $0 / Pro $9.99 [Upgrade]"
+   and "Go ad-free -- Subscribe" next to "$4.99" were allowed as free-plan choices.
+10. **The block is the enclosing form, else the nearest wrapper above the control** (a
+    div-button no longer counts as its own block); a control with no wrapper below the page
+    body has no block -- the whole page is not "next to" it.
+11. **A link into a checkout or to a payment provider is refused even with no price around
+    it** -- two "Add to plan" links on a public pricing page led to `/checkout?key=...` with
+    no price in their block. A same-page or script link (`href="#"`) is not navigation.
+12. **A submit of a form that holds a card or bank field is refused** on any domain.
+13. **A scan of an unexpected shape, an unknown action, or a broken lists file never opens
+    the gate.** Before, an empty scan was read as "no signal", and a broken lists file
+    switched off the card-field rule.
+14. **More price formats** ("1 990 ₽", "19 €", "USD 9.99", "5 000 тг") and payment phrases
+    that whole-word matching had dropped ("Submit payment", "Confirm order").
+
 ## Measurements
 
 **Ordinary pages (false refusals).** 35 public pages: 13 chosen by hand (encyclopaedia,
@@ -46,22 +66,29 @@ clicked. The human's permission was set to the page's own domain.
 
 | | Original gate | This library |
 |---|---|---|
-| refused, of 210 ordinary controls | 37 (18 %) | MEASURE |
+| refused, of 210 ordinary controls | 31 (15 %) | 0 |
 
 **Pages with payment buttons (misses).** 7 public pricing and donation pages; only
-controls whose text contains a payment-like word (26). Every element was checked by hand:
+controls whose text contains a payment-like word (26 on the final run). Every element was checked by hand:
 6 are real purchase buttons (Donate x2, Subscribe, Buy, Buy now x2), the rest are help,
 plan descriptions, terms and FAQ.
 
 | | Original gate | This library |
 |---|---|---|
-| real purchase buttons refused | 6 of 6 | MEASURE |
-| other payment-word controls refused | 18 of 20 | MEASURE |
+| real purchase buttons refused | 6 of 6 | 6 of 6 |
+| other payment-word controls refused | 18 of 20 | 2 of 20 |
 
-**The original's own self-test** (58 cases) was replayed against this library: 52 decide
-the same; 6 differ by design -- three unrelated clicks on pages with a price elsewhere
+Measured on 2026-10-04 on the released code. The same pages change between runs: the day
+before, the original refused 37 of 210. The two controls this library still refuses are a
+product description containing "subscribe" and an FAQ question with a price in it.
+On an earlier run of the payment set, two "Add to plan" links led to a checkout and were
+allowed; that is item 11 above, and the page no longer shows them.
+
+**The original's own self-test** (58 cases) was replayed against this library: 51 decide
+the same; 7 differ by design -- three unrelated clicks on pages with a price elsewhere
 (item 2), a closed-shadow signal the original scanner never set, express-pay words on a page
-that sells nothing, and one case that refuses by an earlier rule with the same outcome.
+that sells nothing, and two cases that refuse by a different rule with the same outcome
+(an earlier address rule; the built-in minimum list when the lists are broken).
 The remaining declared gap is in the README (*Limits*).
 
 **Limits of these measurements.** The page sets are small and chosen by us: they are a

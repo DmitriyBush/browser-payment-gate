@@ -24,7 +24,7 @@ refused on any domain the human did not allow for the task (`DOMAIN_FLOOR`).
 
 | List | Catches | If you remove an entry |
 |---|---|---|
-| `paid_action_labels` | pay / buy / subscribe / checkout on a page that sells (`B_PAID`); committing anywhere | such a button passes unless money stands next to it (`FLOOR`) or another list catches it |
+| `paid_action_labels` | pay / buy / subscribe / checkout, "submit payment", "confirm order", "add to plan" on a page that sells (`B_PAID`); committing anywhere | such a button passes unless money stands next to it (`FLOOR`) or another list catches it |
 | `rail_labels` | invoice, direct debit, pay-later (`B_RAIL`) on a page that sells | the rail button passes on the same terms |
 | `trial_cta_labels` | "start free trial" anywhere (`C_TRIAL`); also stops the free-plan exception | a trial that asks for a card on a later screen passes; "free" next to it may make it `B_FREE` |
 | `pledge_labels` | donate, pledge, become a member -- anywhere (`D_AUTH`) | a donation button passes unless money or recurring terms stand next to it |
@@ -45,10 +45,18 @@ patterns, the free-price pattern, the rule order.
 
 ## A broken file
 
-A missing file, invalid JSON, a non-object, or any required list missing or empty makes
-`Lists.ok` false. The gate then runs **floor-only**: it refuses on any page with a money
-signal (`LISTS_UNAVAILABLE`), refuses screen-coordinate input, and allows only on pages
-that show no money at all (`LISTS_UNAVAILABLE_CLEAN`, which says why). It never opens.
+A missing file, invalid JSON, a non-object, a required list that is missing or empty, or
+an entry that is not a non-blank string makes `Lists.ok` false. The gate then:
+
+- keeps running every rule fixed in code (card / bank / carrier fields, a form with a card
+  field, trial and billing-authorisation terms, payment headings) on a small **built-in
+  minimum** of labels, payment providers and checkout addresses;
+- refuses on any page with a money signal (`LISTS_UNAVAILABLE`) and refuses
+  screen-coordinate input;
+- allows only on pages that show no money at all (`LISTS_UNAVAILABLE_CLEAN`), and every
+  reason names the broken file.
+
+It never opens. `nav_precheck` uses the same built-in minimum.
 
 ## Checking an edited file
 

@@ -43,12 +43,18 @@ print(d.block, d.code, d.reason)
 ```
 
 A refused `guarded_click` / `guarded_fill` raises `PaymentBlocked` and does **not** act.
-A full runnable example: `examples/playwright_guard.py`.
+The adapter resolves the selector once with a Playwright locator, scans exactly that
+element and acts on exactly that locator, so the element judged is the element clicked
+(also inside open shadow roots). Async pages: `check_async`, `guarded_click_async`,
+`guarded_fill_async`. A full runnable example: `examples/playwright_guard.py`.
 
 ## Use with any browser driver
 
-The gate has two halves. `scan.js` runs inside the page and returns a JSON description of
-the page and of the target element; `evaluate()` decides from that description.
+The gate has two halves. `scan.js` is a JavaScript function of the target element that
+runs inside the page and returns a JSON description of the page and of that element;
+`evaluate()` decides from that description. `scan_expression(selector)` wraps it with
+`document.querySelector` -- if your driver resolves selectors differently (shadow roots),
+pass the element it will act on to the function in `SCAN_JS` instead.
 
 ```python
 from browser_payment_gate import scan_expression, parse_scan, evaluate, nav_precheck
@@ -60,7 +66,9 @@ nav_precheck('https://pay.stripe.com/c/pay/...')   # before navigating: the URL 
 ```
 
 Actions: `'click'`, `'type'`, `'goto'`, and `'os-input'` (input by screen coordinates,
-which lands outside the page model). Reading a page never needs the gate.
+which lands outside the page model). Reading a page never needs the gate. `evaluate()`
+never raises: a scan of an unexpected shape, an unknown action or an internal failure is
+refused as `UNRESOLVED` with the reason.
 
 ## What it decides
 
@@ -68,13 +76,14 @@ which lands outside the page model). Reading a page never needs the gate.
 
 | Code | Block | Meaning |
 |---|---|---|
-| `UNRESOLVED` | yes | the page could not be scanned |
+| `UNRESOLVED` | yes | the page could not be scanned, the scan has an unexpected shape, the action is unknown |
 | `TARGET_NOT_FOUND` | yes | the element was not found -- check the selector (not a payment finding) |
 | `LISTS_UNAVAILABLE` | yes | the lists file is broken, and the page shows money |
 | `LISTS_UNAVAILABLE_CLEAN` | no | the lists file is broken, but the page shows no money at all |
 | `OS_INPUT` | yes | screen-coordinate input on a page with money signals, or after an earlier action |
 | `DOMAIN_FLOOR` | yes | a committing action on a domain the human did not allow for this task |
 | `A_CARD` / `A_BANK` / `A_CARRIER` / `A_ATTACH` | yes | a card, bank-account or carrier-billing field; attaching a payment method or wallet |
+| `A_FORM` | yes | submits a form that holds a card or bank-account field |
 | `A_SURFACE` | yes | an action on a dedicated payment page (checkout / billing address or heading) |
 | `C_TRIAL` | yes | a trial that turns into a charge |
 | `D_AUTH` | yes | billing authorisation, recurring payment, pledge or membership |
@@ -82,7 +91,7 @@ which lands outside the page model). Reading a page never needs the gate.
 | `B_RAIL` / `B_PAID` | yes | invoice / pay-later; pay, buy or subscribe on a page that sells |
 | `E_NAV` | yes | navigation to a payment processor, or to an order/confirm address with a token |
 | `FLOOR` | yes | money next to the control and no rule that frees it |
-| `B_FREE` / `G_BALANCE` | no | an explicit free plan; free credit applied to a $0 order |
+| `B_FREE` / `G_BALANCE` | no | an explicit free plan (every price next to it is free); free credit applied to a $0 order |
 | `LINK` | no | a plain link next to money text, judged by its address |
 | `FREE` | no | no payment signal for this action |
 
@@ -100,8 +109,9 @@ python -m browser_payment_gate label "Buy credits" --lists my_lists.json
 ```
 
 What each list catches and what you open by shortening it: `docs/LISTS.md`. A broken or
-incomplete file never opens the gate -- it runs stricter until the file is fixed. If you
-change the lists, the decisions are yours.
+incomplete file never opens the gate: the rules fixed in code keep running on a small
+built-in list, every page with a money signal is refused, and the reason names the broken
+file. If you change the lists, the decisions are yours.
 
 ## Limits
 
@@ -109,10 +119,13 @@ change the lists, the decisions are yours.
   canvas, a closed shadow root); an agent that wants to pay can bypass any wrapper.
 - **Text only.** A price drawn as an image is not seen by `scan.js`; elements inside closed
   shadow roots are not seen at all.
-- **Word lists are English and Russian.** Other languages need their own entries.
-- **One declared gap:** a form submit whose own block shows no price, on a page with a price
-  elsewhere and no card field, payment frame, checkout address or payment label, is allowed.
-  Typing a card number into such a form is still refused.
+- **Word lists are English and Russian.** Other languages need their own entries. Prices
+  are recognised in $, EUR, GBP, RUB, KZT, UAH, CHF (symbol or code, before or after the
+  number); other currencies are not seen as money.
+- **One declared gap:** a form submit is allowed when its own form shows no price and holds
+  no card or bank field, and the page has no payment frame, checkout address or payment
+  label -- even if a price is shown elsewhere on the page. Typing a card number is always
+  refused.
 - Calibration figures and how they were measured: `docs/CALIBRATION.md`.
 
 ## Tests
@@ -123,9 +136,9 @@ playwright install chromium        # or have Chrome installed
 pytest
 ```
 
-127 tests: the decision table, the boundaries the calibration moved (whole words, money
-near the target, `$0` against `$0.01`), the lists, and the scan in a real headless browser
-on local pages (skipped if no browser is available).
+235 tests: the decision table, the boundaries the calibration moved (whole words, money
+near the target, `$0` against `$0.01`), malformed scans and broken lists, and the scan in a
+real headless browser on local pages (skipped if no browser is available).
 
 ## Origin
 

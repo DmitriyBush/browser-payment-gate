@@ -15,7 +15,19 @@
     "подписаться",
     "купить",
     "перейти к оплате",
-    "оформить заказ"
+    "оформить заказ",
+    "submit payment",
+    "make a payment",
+    "make payment",
+    "confirm payment",
+    "complete payment",
+    "confirm and pay",
+    "complete order",
+    "confirm order",
+    "submit order",
+    "place your order",
+    "подтвердить оплату",
+    "подтвердить заказ"
   ],
   "rail_labels": [
     "pay by invoice",
@@ -37,7 +49,8 @@
     "try free",
     "begin trial",
     "начать пробный период",
-    "попробовать бесплатно"
+    "попробовать бесплатно",
+    "free trial"
   ],
   "pledge_labels": [
     "donate",
