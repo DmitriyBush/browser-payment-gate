@@ -1,5 +1,5 @@
 // Page scan of browser-payment-gate. Runs INSIDE the page; returns a JSON string.
-// {SELECTOR} is replaced (escaped) by scanner.py. All label matching happens in Python.
+// The selector placeholder below is replaced by scanner.py with a JSON string literal. All label matching happens in Python.
 (function(){
   function txt(el){ try { return (el.textContent||'').slice(0,2000); } catch(e){ return ''; } }
   var out = {url: location.href, domain: location.hostname,
@@ -27,7 +27,8 @@
   var srcs = [];
   for (var k=0;k<iframes.length && k<20;k++){ try { srcs.push(new URL(iframes[k]).hostname); } catch(e){ srcs.push(iframes[k]); } }
   var bodyText = (document.body ? document.body.innerText : '') || '';
-  var priceRe = /(\$|EUR|GBP|RUB|\u20ac|\u00a3|\u20bd)\s?\d|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|\u20ac|\u00a3|\u20bd)/i;
+  // the whole amount: "$0.99" must not be read as "$0" (free)
+  var priceRe = /(\$|EUR|GBP|RUB|\u20ac|\u00a3|\u20bd)\s?\d+(?:[.,]\d+)*|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|\u20ac|\u00a3|\u20bd)/i;
   var sig = {
     orderTotal: /\b(total|order summary|amount due|subtotal)\b|\u0438\u0442\u043e\u0433\u043e|\u043a \u043e\u043f\u043b\u0430\u0442\u0435/i.test(bodyText),
     priceShown: priceRe.test(bodyText),
@@ -42,7 +43,7 @@
     unresolvableControls: false
   };
   out.signals = sig;
-  var sel = "{SELECTOR}";
+  var sel = {SELECTOR};
   var el = null;
   try { el = document.querySelector(sel); } catch(e){ el = null; }
   if (!el){

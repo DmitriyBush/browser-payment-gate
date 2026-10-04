@@ -16,8 +16,9 @@ with open(os.path.join(_HERE, 'scan.js'), 'r', encoding='utf-8') as _f:
 
 def scan_expression(selector):
     """The JavaScript expression to evaluate in the page for this CSS selector."""
-    sel = (selector or '').replace('\\', '\\\\').replace('"', '\\"')
-    return SCAN_JS.replace('{SELECTOR}', sel)
+    # json.dumps gives a valid JS string literal for any text (quotes, backslashes, line
+    # breaks); the placeholder occurs once in scan.js, in code, not in a comment.
+    return SCAN_JS.replace('{SELECTOR}', json.dumps(selector or ''))
 
 
 def parse_scan(result):

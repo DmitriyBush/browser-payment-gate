@@ -128,7 +128,8 @@ VERIFY_PATH_RE = re.compile(r'verify|activate-?account|verify-?email|confirm-?em
 FREE_INDICATOR_RE = re.compile(r'\bfree\b|бесплатн', re.I)
 FREE_PRICE_RE = re.compile(r'^\s*(free|\$?0([.,]0{1,2})?|0\s*(usd|eur|руб))\s*$', re.I)
 # Price and total near the target (same shapes the scanner uses page-wide).
-PRICE_RE = re.compile(r'(\$|EUR|GBP|RUB|€|£|₽)\s?\d|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|€|£|₽)', re.I)
+# The WHOLE amount is captured: "$0.99" must not be read as "$0" (free).
+PRICE_RE = re.compile(r'(\$|EUR|GBP|RUB|€|£|₽)\s?\d+(?:[.,]\d+)*|\d+[.,]\d{2}\s?(\$|EUR|GBP|USD|RUB|€|£|₽)', re.I)
 TOTAL_RE = re.compile(r'\b(total|order summary|amount due|subtotal)\b|итого|к оплате', re.I)
 
 
@@ -211,6 +212,11 @@ def _local_money(t):
     """Price or total text in the target's own block (form/section/div)."""
     anc = t.get('ancestorText') or ''
     price = (t.get('adjacentPrice') or '').strip()
+    if not price:
+        # scan.js fills adjacentPrice itself; a scanner that does not still gets judged
+        # on the block text, the same way.
+        m = PRICE_RE.search(anc)
+        price = m.group(0) if m else ''
     return bool((price and not FREE_PRICE_RE.match(price)) or TOTAL_RE.search(anc))
 
 
