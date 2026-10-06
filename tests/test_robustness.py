@@ -158,6 +158,22 @@ def test_submit_of_form_with_card_field():
     assert evaluate(s, 'click', D).code == 'A_FORM'
 
 
+def test_submit_without_form_fields_key_falls_back_to_page_fields():
+    # a scan with no target.formFields (older or foreign scanner) cannot say which form is
+    # submitted: a card field on the page counts as held by it
+    s = scan(fields=[{'autocomplete': 'cc-number', 'name': '', 'id': '', 'tag': 'INPUT'}],
+             target={'text': 'Send', 'isFormSubmit': True})
+    assert 'formFields' not in s['target']
+    assert evaluate(s, 'click', D).code == 'A_FORM'
+
+
+def test_submit_with_empty_form_fields_is_not_the_card_form():
+    # formFields present and empty: the scanner resolved the form and it holds no card field
+    s = scan(fields=[{'autocomplete': 'cc-number', 'name': '', 'id': '', 'tag': 'INPUT'}],
+             target={'text': 'Send', 'isFormSubmit': True, 'formFields': []})
+    assert evaluate(s, 'click', D).code != 'A_FORM'
+
+
 def test_submit_of_other_form_on_page_with_card_widget():
     # the card field is in another form: allowed on an allowed domain, refused elsewhere
     s = scan(fields=[{'autocomplete': 'cc-number'}],
