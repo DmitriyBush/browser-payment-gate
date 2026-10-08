@@ -176,7 +176,7 @@ TOTAL_RE = re.compile(r'\b(total|order summary|amount due|subtotal)\b|итого
 
 _TARGET_STR = ('tag', 'type', 'text', 'aria', 'autocomplete', 'name', 'id', 'href',
                'ancestorText', 'adjacentPrice')
-_TARGET_BOOL = ('isFormSubmit', 'inClosedShadow')
+_TARGET_BOOL = ('isFormSubmit', 'inClosedShadow', 'formFieldsTruncated')
 _SCAN_STR = ('url', 'domain', 'title', 'heading')
 
 

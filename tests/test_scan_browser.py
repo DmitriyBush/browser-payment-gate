@@ -280,3 +280,49 @@ def test_small_form_not_flagged(page):
     open_(page, 'https://shop.test/smallform')
     assert scan_page(page, '#send')['target']['formFieldsTruncated'] is False
     assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is False
+
+
+def _form_page(n_data, card_last, extra_buttons=0):
+    return ("<html><head><title>Survey</title></head><body><h1>Survey</h1><form>"
+            + "".join('<input name="q%d">' % i for i in range(n_data - (1 if card_last else 0)))
+            + ('<input id="cc" autocomplete="cc-number" name="cardnumber">' if card_last else '')
+            + "".join('<button type="button">x</button>' for _ in range(extra_buttons))
+            + '<button id="send" type="submit">Send</button></form></body></html>')
+
+
+PAGES['https://shop.test/f300card'] = _form_page(300, True)
+PAGES['https://shop.test/f301'] = _form_page(301, False)
+PAGES['https://shop.test/f300'] = _form_page(300, False)
+PAGES['https://shop.test/f100btn'] = _form_page(100, False, extra_buttons=250)
+PAGES['https://shop.test/imgsubmit'] = ('<html><body><form><input autocomplete="cc-number" name="c">'
+                                        '<input id="go" type="image" src="x.png" alt="Go"></form></body></html>')
+
+
+def test_boundary_exactly_300_data_fields_card_last_is_seen(page):
+    open_(page, 'https://shop.test/f300card')
+    s = scan_page(page, '#send')
+    assert s['target']['formFieldsTruncated'] is False and len(s['target']['formFields']) == 300
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).code == 'A_FORM'
+
+
+def test_boundary_300_data_fields_not_cut_301_cut(page):
+    open_(page, 'https://shop.test/f300')
+    assert scan_page(page, '#send')['target']['formFieldsTruncated'] is False
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is False
+    open_(page, 'https://shop.test/f301')
+    assert scan_page(page, '#send')['target']['formFieldsTruncated'] is True
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is True
+
+
+def test_buttons_do_not_count_toward_the_cut(page):
+    # 100 inputs + 250 buttons = 351 elements, but only 100 data fields: not cut, allowed
+    open_(page, 'https://shop.test/f100btn')
+    assert scan_page(page, '#send')['target']['formFieldsTruncated'] is False
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is False
+
+
+def test_image_input_submits_the_form(page):
+    open_(page, 'https://shop.test/imgsubmit')
+    s = scan_page(page, '#go')
+    assert s['target']['isFormSubmit'] is True
+    assert check(page, '#go', 'click', expected_domains={'shop.test'}).block is True

@@ -123,6 +123,10 @@ file. If you change the lists, the decisions are yours.
   canvas, a closed shadow root); an agent that wants to pay can bypass any wrapper.
 - **Text only.** A price drawn as an image is not seen by `scan.js`; elements inside closed
   shadow roots are not seen at all.
+- **Script-made submit buttons.** A `div` or link that submits a form through a script is not
+  tied to that form, so the form's own fields are not checked for it (the page-level signals still are).
+- **Very large forms.** Only the first 300 data fields of a form are read; a submit of a larger form
+  is refused, because a card field may be past the cut.
 - **Word lists are English and Russian.** Other languages need their own entries. Prices
   are recognised in $, EUR, GBP, RUB, KZT, UAH, CHF (symbol or code, before or after the
   number); other currencies are not seen as money.

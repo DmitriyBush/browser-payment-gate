@@ -244,3 +244,10 @@ def test_submit_of_full_form_not_cut_is_allowed():
     s = scan(target={'text': 'Send', 'isFormSubmit': True, 'formFieldsTruncated': False,
                      'formFields': [{'autocomplete': 'email', 'name': 'e', 'id': '', 'tag': 'INPUT'}]})
     assert evaluate(s, 'click', D).block is False
+
+
+@pytest.mark.parametrize('bad', ['true', 1, 'yes', [1]])
+def test_form_fields_truncated_not_bool_is_refused(bad):
+    s = scan(target={'text': 'Send', 'isFormSubmit': True, 'formFieldsTruncated': bad, 'formFields': []})
+    d = evaluate(s, 'click', D)
+    assert d.block is True and d.code == 'UNRESOLVED'

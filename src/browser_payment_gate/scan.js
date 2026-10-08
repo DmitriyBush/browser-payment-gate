@@ -66,9 +66,20 @@ function (el) {
   if (anc === document.body || anc === document.documentElement){ anc = el; }
   var ancText = txt(anc);
   var m = ancText.match(priceRe);
-  var formFields = [];
+  // Data fields of the form the control submits; buttons, fieldsets, outputs and objects carry no data.
+  // formCut: more data fields than FIELDS_MAX -- the rest are not seen (core refuses such a submit).
+  var formFields = [], formCut = false, NOT_DATA = {BUTTON:1, FIELDSET:1, OUTPUT:1, OBJECT:1};
   try {
-    if (el.form){ for (var f=0; f<el.form.elements.length && f<FIELDS_MAX; f++){ formFields.push(fieldOf(el.form.elements[f])); } }
+    if (el.form){
+      var nData = 0;
+      for (var f=0; f<el.form.elements.length; f++){
+        var fe = el.form.elements[f];
+        if (NOT_DATA[fe.tagName] || /^(submit|button|reset|image)$/i.test(fe.type || '')) continue;
+        nData++;
+        if (nData <= FIELDS_MAX){ formFields.push(fieldOf(fe)); }
+      }
+      formCut = nData > FIELDS_MAX;
+    }
   } catch(e){ out.signals.scanError = true; }
   var rawHref = el.getAttribute('href') || '';
   function noFrag(u){ return String(u||'').split('#')[0]; }
@@ -83,9 +94,9 @@ function (el) {
     autocomplete:(el.getAttribute('autocomplete')||''),
     name:(el.getAttribute('name')||''), id:(el.id||''),
     href:(!scriptLink && el.href) ? String(el.href) : '',
-    isFormSubmit: (el.type === 'submit') || (el.form != null && (el.tagName==='BUTTON' || el.type==='submit')),
+    isFormSubmit: (el.type === 'submit') || (el.type === 'image' && el.form != null) || (el.form != null && (el.tagName==='BUTTON' || el.type==='submit')),
     formFields: formFields,
-    formFieldsTruncated: !!(el.form && el.form.elements && el.form.elements.length > FIELDS_MAX),
+    formFieldsTruncated: formCut,
     ancestorText: ancText,
     adjacentPrice: m ? m[0] : '',
     inClosedShadow:false
