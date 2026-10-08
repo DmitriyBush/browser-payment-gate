@@ -539,9 +539,11 @@ def _evaluate(scan, action, expected, prior_mutation, lists):
     # a scan without target.formFields (older or foreign scanner) cannot say which form this
     # control submits: assume it may hold the page's card or bank field
     form_fields = t.get('formFields') if 'formFields' in t else scan.get('fields')
-    if t.get('isFormSubmit') and any(_is_card_field(f) or _is_bank_field(f)
-                                     for f in form_fields or []):
-        return Decision(True, 'A_FORM', 'submits a form that holds a card or bank-account field')
+    page_cut = 'formFields' not in t and (scan.get('signals') or {}).get('fieldsTruncated')
+    if t.get('isFormSubmit') and (page_cut or any(_is_card_field(f) or _is_bank_field(f)
+                                                  for f in form_fields or [])):
+        return Decision(True, 'A_FORM', 'submits a form that holds a card or bank-account field'
+                        + (' (the page field list was cut, the rest cannot be seen)' if page_cut else ''))
     heading = (scan.get('heading') or '') + ' ' + (scan.get('title') or '')
     if sdet['s3'] or re.search(r'checkout|billing|add card|add payment|payment method', heading, re.I):
         return Decision(True, 'A_SURFACE', 'action on a dedicated payment page')

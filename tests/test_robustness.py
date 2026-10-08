@@ -180,11 +180,19 @@ def test_submit_without_form_fields_key_bank_field_on_page():
     assert evaluate(s, 'click', D).block is True
 
 
-def test_submit_with_form_fields_none_falls_back_like_absent():
+def test_submit_with_form_fields_none_is_refused_as_malformed():
     s = scan(fields=[{'autocomplete': 'cc-number', 'name': '', 'id': '', 'tag': 'INPUT'}],
              target={'text': 'Send', 'isFormSubmit': True, 'formFields': None})
     d = evaluate(s, 'click', D)
-    assert d.block is True
+    assert d.block is True and d.code == 'UNRESOLVED'
+
+
+def test_submit_without_form_fields_key_page_list_cut_is_refused():
+    # 300 ordinary fields seen, the list was cut: a card field may sit after the cut
+    s = scan(fields=[{'autocomplete': 'email', 'name': 'f%d' % i, 'id': '', 'tag': 'INPUT'} for i in range(300)],
+             target={'text': 'Send', 'isFormSubmit': True}, signals={'fieldsTruncated': True})
+    d = evaluate(s, 'click', D)
+    assert d.block is True and d.code == 'A_FORM'
 
 
 def test_submit_without_form_fields_key_no_payment_field_is_allowed():
