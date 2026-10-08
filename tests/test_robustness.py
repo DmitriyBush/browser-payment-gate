@@ -171,7 +171,27 @@ def test_submit_with_empty_form_fields_is_not_the_card_form():
     # formFields present and empty: the scanner resolved the form and it holds no card field
     s = scan(fields=[{'autocomplete': 'cc-number', 'name': '', 'id': '', 'tag': 'INPUT'}],
              target={'text': 'Send', 'isFormSubmit': True, 'formFields': []})
-    assert evaluate(s, 'click', D).code != 'A_FORM'
+    assert evaluate(s, 'click', D).block is False
+
+
+def test_submit_without_form_fields_key_bank_field_on_page():
+    s = scan(fields=[{'autocomplete': '', 'name': 'iban', 'id': '', 'tag': 'INPUT'}],
+             target={'text': 'Send', 'isFormSubmit': True})
+    assert evaluate(s, 'click', D).block is True
+
+
+def test_submit_with_form_fields_none_falls_back_like_absent():
+    s = scan(fields=[{'autocomplete': 'cc-number', 'name': '', 'id': '', 'tag': 'INPUT'}],
+             target={'text': 'Send', 'isFormSubmit': True, 'formFields': None})
+    d = evaluate(s, 'click', D)
+    assert d.block is True
+
+
+def test_submit_without_form_fields_key_no_payment_field_is_allowed():
+    # the fallback's false-block boundary: no card or bank field on the page -> an ordinary submit goes
+    s = scan(fields=[{'autocomplete': 'email', 'name': 'email', 'id': '', 'tag': 'INPUT'}],
+             target={'text': 'Subscribe', 'isFormSubmit': True})
+    assert evaluate(s, 'click', D).block is False
 
 
 def test_submit_of_other_form_on_page_with_card_widget():

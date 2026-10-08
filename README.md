@@ -56,6 +56,10 @@ runs inside the page and returns a JSON description of the page and of that elem
 `document.querySelector` -- if your driver resolves selectors differently (shadow roots),
 pass the element it will act on to the function in `SCAN_JS` instead.
 
+If you build the scan yourself instead of using `scan.js`, include `target.formFields` (the fields of
+the form the target submits; `[]` when it submits none). Without it the gate cannot tell which form a
+submit button belongs to, so on a page with a card or bank field every form submit is refused.
+
 ```python
 from browser_payment_gate import scan_expression, parse_scan, evaluate, nav_precheck
 
