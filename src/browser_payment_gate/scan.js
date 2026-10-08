@@ -85,6 +85,7 @@ function (el) {
     href:(!scriptLink && el.href) ? String(el.href) : '',
     isFormSubmit: (el.type === 'submit') || (el.form != null && (el.tagName==='BUTTON' || el.type==='submit')),
     formFields: formFields,
+    formFieldsTruncated: !!(el.form && el.form.elements && el.form.elements.length > FIELDS_MAX),
     ancestorText: ancText,
     adjacentPrice: m ? m[0] : '',
     inClosedShadow:false

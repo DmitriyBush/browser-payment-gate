@@ -540,10 +540,11 @@ def _evaluate(scan, action, expected, prior_mutation, lists):
     # control submits: assume it may hold the page's card or bank field
     form_fields = t.get('formFields') if 'formFields' in t else scan.get('fields')
     page_cut = 'formFields' not in t and (scan.get('signals') or {}).get('fieldsTruncated')
+    page_cut = page_cut or t.get('formFieldsTruncated') is True  # the form itself was cut at FIELDS_MAX
     if t.get('isFormSubmit') and (page_cut or any(_is_card_field(f) or _is_bank_field(f)
                                                   for f in form_fields or [])):
         return Decision(True, 'A_FORM', 'submits a form that holds a card or bank-account field'
-                        + (' (the page field list was cut, the rest cannot be seen)' if page_cut else ''))
+                        + (' (the field list was cut, the rest cannot be seen)' if page_cut else ''))
     heading = (scan.get('heading') or '') + ' ' + (scan.get('title') or '')
     if sdet['s3'] or re.search(r'checkout|billing|add card|add payment|payment method', heading, re.I):
         return Decision(True, 'A_SURFACE', 'action on a dedicated payment page')

@@ -230,3 +230,17 @@ def test_iframes_cut_short_count_as_payment_frame():
 ])
 def test_verify_exception_path_only(url, block):
     assert nav_precheck(url).block is block
+
+
+def test_submit_of_form_cut_at_field_cap_is_refused():
+    # a form of more than FIELDS_MAX elements: the card field may be past the cut
+    s = scan(target={'text': 'Send', 'isFormSubmit': True, 'formFieldsTruncated': True,
+                     'formFields': [{'autocomplete': 'email', 'name': 'f%d' % i, 'id': '', 'tag': 'INPUT'} for i in range(300)]})
+    d = evaluate(s, 'click', D)
+    assert d.block is True and d.code == 'A_FORM'
+
+
+def test_submit_of_full_form_not_cut_is_allowed():
+    s = scan(target={'text': 'Send', 'isFormSubmit': True, 'formFieldsTruncated': False,
+                     'formFields': [{'autocomplete': 'email', 'name': 'e', 'id': '', 'tag': 'INPUT'}]})
+    assert evaluate(s, 'click', D).block is False

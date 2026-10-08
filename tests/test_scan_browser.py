@@ -256,3 +256,27 @@ def test_async_page_in_sync_call_says_why():
             l = FakeLoc(); l.first = l; return l
     d = check(FakePage(), '#x')
     assert d.code == 'UNRESOLVED' and 'async' in d.reason
+
+
+BIGFORM = ("<html><head><title>Survey</title></head><body><h1>Survey</h1><form>"
+           + "".join('<input name="q%d">' % i for i in range(300))
+           + '<input id="cc" autocomplete="cc-number" name="cardnumber">'
+           + '<button id="send" type="submit">Send</button></form></body></html>')
+SMALLFORM = ('<html><head><title>Survey</title></head><body><h1>Survey</h1><form>'
+             '<input name="q1"><button id="send" type="submit">Send</button></form></body></html>')
+PAGES['https://shop.test/bigform'] = BIGFORM
+PAGES['https://shop.test/smallform'] = SMALLFORM
+
+
+def test_form_cut_at_field_cap_is_flagged_and_refused(page):
+    # 301 inputs, the card field is the 301st -- past the 300-field cut
+    open_(page, 'https://shop.test/bigform')
+    s = scan_page(page, '#send')
+    assert s['target']['formFieldsTruncated'] is True
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is True
+
+
+def test_small_form_not_flagged(page):
+    open_(page, 'https://shop.test/smallform')
+    assert scan_page(page, '#send')['target']['formFieldsTruncated'] is False
+    assert check(page, '#send', 'click', expected_domains={'shop.test'}).block is False
