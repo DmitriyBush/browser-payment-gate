@@ -540,7 +540,11 @@ def _evaluate(scan, action, expected, prior_mutation, lists):
     # control submits: assume it may hold the page's card or bank field
     form_fields = t.get('formFields') if 'formFields' in t else scan.get('fields')
     page_cut = 'formFields' not in t and (scan.get('signals') or {}).get('fieldsTruncated')
-    page_cut = page_cut or t.get('formFieldsTruncated') is True  # the form itself was cut at FIELDS_MAX
+    # the form itself was cut at 300 data fields; a scanner that does not send the flag but sends 300 fields
+    # (the cap) may have cut it too -- unknown counts as cut
+    ff = t.get('formFields') if isinstance(t.get('formFields'), list) else []
+    page_cut = page_cut or t.get('formFieldsTruncated') is True or (
+        t.get('formFieldsTruncated') is None and 'formFields' in t and len(ff) >= 300)
     if t.get('isFormSubmit') and (page_cut or any(_is_card_field(f) or _is_bank_field(f)
                                                   for f in form_fields or [])):
         return Decision(True, 'A_FORM', 'submits a form that holds a card or bank-account field'

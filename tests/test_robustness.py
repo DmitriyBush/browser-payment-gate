@@ -251,3 +251,25 @@ def test_form_fields_truncated_not_bool_is_refused(bad):
     s = scan(target={'text': 'Send', 'isFormSubmit': True, 'formFieldsTruncated': bad, 'formFields': []})
     d = evaluate(s, 'click', D)
     assert d.block is True and d.code == 'UNRESOLVED'
+
+
+def _ff(n):
+    return [{'autocomplete': 'email', 'name': 'f%d' % i, 'id': '', 'tag': 'INPUT'} for i in range(n)]
+
+
+def test_300_form_fields_without_the_flag_count_as_cut():
+    # an older or foreign scanner: 300 fields (the cap) and no formFieldsTruncated -- may be cut
+    d = evaluate(scan(target={'text': 'Send', 'isFormSubmit': True, 'formFields': _ff(300)}), 'click', D)
+    assert d.block is True and d.code == 'A_FORM'
+
+
+def test_299_form_fields_without_the_flag_are_not_cut():
+    d = evaluate(scan(target={'text': 'Send', 'isFormSubmit': True, 'formFields': _ff(299)}), 'click', D)
+    assert d.block is False
+
+
+def test_300_form_fields_with_flag_false_are_not_cut():
+    # our own scanner says the form has exactly 300 data fields: nothing was cut
+    d = evaluate(scan(target={'text': 'Send', 'isFormSubmit': True, 'formFields': _ff(300),
+                              'formFieldsTruncated': False}), 'click', D)
+    assert d.block is False

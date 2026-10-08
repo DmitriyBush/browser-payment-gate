@@ -66,9 +66,9 @@ function (el) {
   if (anc === document.body || anc === document.documentElement){ anc = el; }
   var ancText = txt(anc);
   var m = ancText.match(priceRe);
-  // Data fields of the form the control submits; buttons, fieldsets, outputs and objects carry no data.
+  // Data fields of the form the control submits; buttons, fieldsets and outputs carry no data.
   // formCut: more data fields than FIELDS_MAX -- the rest are not seen (core refuses such a submit).
-  var formFields = [], formCut = false, NOT_DATA = {BUTTON:1, FIELDSET:1, OUTPUT:1, OBJECT:1};
+  var formFields = [], formCut = false, NOT_DATA = {BUTTON:1, FIELDSET:1, OUTPUT:1};
   try {
     if (el.form){
       var nData = 0;
