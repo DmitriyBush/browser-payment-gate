@@ -1,4 +1,6 @@
-# browser-payment-gate
+<p align="center"><img src="serpentis-emblem.png" alt="Serpentis AI" width="200"></p>
+<h1 align="center">browser-payment-gate</h1>
+<p align="center"><sub>by Serpentis AI · <a href="https://serpentis.ai">serpentis.ai</a> · Apache-2.0</sub></p>
 
 Before an AI agent clicks, types or navigates in a web page, ask one question: **could
 this action spend money or attach a payment method?** If it could -- or if the page cannot
