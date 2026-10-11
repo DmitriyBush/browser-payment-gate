@@ -20,8 +20,8 @@ and drives the browser around it (see *Limits*).
 ## Install
 
 ```sh
-pip install "git+https://github.com/Serpentis-Git/browser-payment-gate"   # the decision core, no dependencies
-pip install "browser-payment-gate[playwright] @ git+https://github.com/Serpentis-Git/browser-payment-gate"   # plus the Playwright adapter
+pip install "git+https://github.com/DmitriyBush/browser-payment-gate"   # the decision core, no dependencies
+pip install "browser-payment-gate[playwright] @ git+https://github.com/DmitriyBush/browser-payment-gate"   # plus the Playwright adapter
 ```
 
 Not on PyPI yet: install from this repository as shown. Python 3.8+. The core imports only the standard library.
