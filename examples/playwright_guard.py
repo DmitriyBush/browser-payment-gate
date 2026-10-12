@@ -1,6 +1,6 @@
 """browser-payment-gate with Playwright: an agent's click goes through the gate first.
 
-    pip install "browser-payment-gate[playwright]"
+    pip install "browser-payment-gate[playwright] @ git+https://github.com/DmitriyBush/browser-payment-gate"
     playwright install chromium
     python examples/playwright_guard.py
 

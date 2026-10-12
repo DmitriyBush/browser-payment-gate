@@ -160,7 +160,7 @@ FREE_INDICATOR_RE = re.compile(r'(?<![\w-])free\b|бесплатн', re.I)
 
 # Prices. The WHOLE amount is captured ("$0.99" is not "$0"); thousands may be grouped by
 # spaces ("1 990 ₽"); the currency may stand before or after the number.
-_AMOUNT = r'\d+(?:[   ]\d{3})*(?:[.,]\d+)*'
+_AMOUNT = r'\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d+)*'   # space, no-break space, narrow no-break space
 _CUR_BEFORE = r'(?:\$|€|£|₽|₸|\b(?:USD|EUR|GBP|RUB|KZT|UAH|CHF)\b)'
 _CUR_AFTER = r'(?:\$|€|£|₽|₸|(?:USD|EUR|GBP|RUB|KZT|UAH|CHF|руб|тг)(?![a-zа-яё]))'
 PRICE_RE = re.compile(_CUR_BEFORE + r'\s?' + _AMOUNT + '|' + _AMOUNT + r'\s?' + _CUR_AFTER, re.I)

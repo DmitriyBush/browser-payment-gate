@@ -40,6 +40,10 @@ function (el) {
   var curBefore = '(?:\\$|\\u20ac|\\u00a3|\\u20bd|\\u20b8|\\b(?:USD|EUR|GBP|RUB|KZT|UAH|CHF)\\b)';
   var curAfter = '(?:\\$|\\u20ac|\\u00a3|\\u20bd|\\u20b8|(?:USD|EUR|GBP|RUB|KZT|UAH|CHF|\\u0440\\u0443\\u0431|\\u0442\\u0433)(?![a-z\\u0430-\\u044f\\u0451]))';
   var priceRe = new RegExp(curBefore + '\\s?' + amount + '|' + amount + '\\s?' + curAfter, 'i');
+  // priceAsImage, paymentIframe and blockedUrl stay false here on purpose: this scanner
+  // reads text only (a price drawn as an image is not seen), and the core itself decides
+  // the payment iframe from iframeSrcs and the checkout URL from out.url against the lists.
+  // The fields remain so that another scanner can report what this one cannot see.
   out.signals = {
     orderTotal: /\b(total|order summary|amount due|subtotal)\b|итого|к оплате/i.test(bodyText),
     priceShown: priceRe.test(bodyText),
